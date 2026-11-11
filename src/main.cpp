@@ -146,6 +146,8 @@ public:
 	}
 
 	bool get_tc_auto_mode() const { return tcAutoMode; }
+	/// -1 = not given on the command line, 0 = off, 1 = on
+	int get_tecu_enabled() const { return tecuEnabled; }
 	std::uint8_t get_tc_function_instance() const { return tcFunctionInstance; }
 
 	bool is_file_logging() const
@@ -166,6 +168,7 @@ private:
 			std::cout << "  --can_channel=<channel>\tCAN channel or ISOBridge Teensy IPv4 address (UDP port 9200)\n";
 			std::cout << "  --tc_number_mode=<auto|manual>\tChoose TC Function Instance automatically or manually (default: manual)\n";
 			std::cout << "  --tc_function_instance=<0..7>\tTC Function Instance for manual mode (default: 0)\n";
+			std::cout << "  --tecu_enabled=<true|false>\tEnable or disable the Tractor ECU (saved in settings, as from the VT)\n";
 			std::cout << "  --log_level=<level>\tSet the log level (debug, info, warning, error, critical)\n";
 			std::cout << "  --log2file\t\tLog to file\n";
 			std::exit(0);
@@ -237,6 +240,13 @@ private:
 			}
 			catch (...) { std::cout << "Invalid TC Function Instance: " << value << std::endl; return false; }
 		}
+		else if ("--tecu_enabled" == key)
+		{
+			// Sent by AgIO (TECU checkbox). Same effect as the TECU setting on the VT page.
+			if (value == "true" || value == "1") tecuEnabled = 1;
+			else if (value == "false" || value == "0") tecuEnabled = 0;
+			else { std::cout << "Invalid TECU value: " << value << " (expected true or false)" << std::endl; return false; }
+		}
 		else if ("--log_level" == key)
 		{
 			if ("debug" == value)
@@ -278,6 +288,7 @@ private:
 	bool fileLogging = false;
 	bool tcAutoMode = false;
 	std::uint8_t tcFunctionInstance = 0;
+	int tecuEnabled = -1;
 };
 
 static std::shared_ptr<isobus::CANHardwarePlugin> create_can_driver(const ArgumentProcessor &args)
@@ -360,6 +371,18 @@ static std::shared_ptr<isobus::CANHardwarePlugin> prepare_application(const std:
 		return nullptr;
 	}
 
+	if (argumentProcessor.get_tecu_enabled() >= 0)
+	{
+		// Stored before the application loads its settings, so it applies to this run.
+		Settings tecuSettings;
+		tecuSettings.load();
+		const bool enable = (1 == argumentProcessor.get_tecu_enabled());
+		if (tecuSettings.is_tecu_enabled() != enable)
+		{
+			tecuSettings.set_tecu_enabled(enable, true);
+		}
+		std::cout << "TECU: " << (enable ? "ON" : "OFF") << " (--tecu_enabled)" << std::endl;
+	}
 	tcAutoMode = argumentProcessor.get_tc_auto_mode();
 	tcFunctionInstance = argumentProcessor.get_tc_function_instance();
 	return create_can_driver(argumentProcessor);
